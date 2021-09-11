@@ -84,7 +84,13 @@ function commitWork(fiber) {
     return;
   }
 
-  const domParent = fiber.parent.dom;
+  //go up the fiber tree until we find a fiber with a DOM node.
+  let domParentFiber = fiber.parent;
+  while (!domParentFiber.dom) {
+    domParentFiber = domParentFiber.parent;
+  }
+  const domParent = domParentFiber.dom;
+
   if (fiber.effectTag === "PLACEMENT" && fiber.dom != null) {
     domParent.appendChild(fiber.dom);
   } else if (fiber.effectTag === "UPDATE" && fiber.dom != null) {
@@ -140,24 +146,14 @@ when the main thread is idle.
 requestIdleCallback(workLoop);
 
 function performUnitOfWork(fiber) {
-  // 1. add the element to the DOM
-  if (!fiber.dom) {
-    fiber.dom = createDom(fiber);
+  const isFunctionComponent = fiber.type instanceof Function;
+  if (isFunctionComponent) {
+    updateFunctionComponent(fiber);
+  } else {
+    updateHostComponent(fiber);
   }
 
-  // /* the browser could interrupt
-  // our work before we finish rendering the whole tree,
-  //  the user will see an incomplete UI */
-  // if(fiber.parent) {
-  //   fiber.parent.dom.appendChild(fiber.dom)
-  // }
-
-  //2. create the fibers for the element’s children
-
-  const elements = fiber.props.children;
-  reconcileChildren(fiber, elements);
-
-  //3. return the next unit of work
+  // return the next unit of work
   if (fiber.child) {
     //a. 先返回子节点
     return fiber.child;
@@ -170,6 +166,18 @@ function performUnitOfWork(fiber) {
     }
     nextFiber = nextFiber.parent; // c. 没有子节点，没有兄弟节点，就去找父节点的兄弟节点
   }
+}
+
+function updateFunctionComponent(fiber) {
+  const children = [fiber.type(fiber.props)];
+  reconcileChildren(fiber, children);
+}
+
+function updateHostComponent(fiber) {
+  if (!fiber.dom) {
+    fiber.dom = createDom(fiber);
+  }
+  reconcileChildren(fiber, fiber.props.children);
 }
 
 function reconcileChildren(wipFiber, elements) {
@@ -236,20 +244,28 @@ const Didact = {
 };
 
 /** @jsx Didact.createElement */
+function App(props) {
+  return <h1>Hi {props.name}</h1>;
+}
+
+const element = <App name="foo" />;
 const container = document.getElementById("root");
+Didact.render(element, container);
 
-const updateValue = (e) => {
-  rerender(e.target.value);
-};
+// const container = document.getElementById("root");
 
-const rerender = (value) => {
-  const element = (
-    <div>
-      <input onInput={updateValue} value={value} />
-      <h2>Hello {value}</h2>
-    </div>
-  );
-  Didact.render(element, container);
-};
+// const updateValue = (e) => {
+//   rerender(e.target.value);
+// };
 
-rerender("World");
+// const rerender = (value) => {
+//   const element = (
+//     <div>
+//       <input onInput={updateValue} value={value} />
+//       <h2>Hello {value}</h2>
+//     </div>
+//   );
+//   Didact.render(element, container);
+// };
+
+// rerender("World");
